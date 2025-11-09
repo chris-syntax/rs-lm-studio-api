@@ -1,29 +1,27 @@
+use super::{Message, Role, SystemInfo};
 use crate::prelude::*;
-use super::{ Role, Message, SystemInfo, };
-use tiktoken_rs::{ CoreBPE, cl100k_base };
+use tiktoken_rs::{cl100k_base, CoreBPE};
 
 /// Chat context
 #[derive(Clone)]
 pub struct Context {
     tokenizer: CoreBPE,
     pub messages: Vec<Message>,
-    pub system_prompt: Arc<Mutex<Box<dyn SystemInfo>>>,
+    pub system_prompt: Arc<Mutex<Box<dyn SystemInfo + Send + Sync>>>,
     pub tokens_limit: u32,
     pub total_tokens: u32,
 }
 
 impl Context {
     /// Creates a new chat context
-    pub fn new(system_prompt: Box<dyn SystemInfo>, tokens_limit: u32) -> Self {
+    pub fn new(system_prompt: Box<dyn SystemInfo + Send + Sync>, tokens_limit: u32) -> Self {
         // init tokeninzer:
         let tokenizer = cl100k_base().expect("Failed to create tokenizer");
-        
+
         // creating context:
         let mut context = Self {
             tokenizer,
-            messages: vec![
-                Message::new(Role::System, str!()),
-            ],
+            messages: vec![Message::new(Role::System, str!())],
             system_prompt: Arc::new(Mutex::new(system_prompt)),
             tokens_limit,
             total_tokens: 0,
@@ -60,7 +58,8 @@ impl Context {
 
     /// Returns all context messages as single string
     pub fn get_as_string(&self) -> String {
-        self.messages.clone()
+        self.messages
+            .clone()
             .into_iter()
             .map(|msg| msg.text().to_owned())
             .collect::<Vec<_>>()
@@ -76,7 +75,7 @@ impl Context {
     pub fn tokenize(&self, text: &str) -> Vec<u32> {
         self.tokenizer.encode_with_special_tokens(text)
     }
-    
+
     /// Calculates tokens count
     pub fn count_tokens(&self, text: &str) -> u32 {
         self.tokenize(text).len() as u32
